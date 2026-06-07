@@ -276,6 +276,29 @@
             <p>评分：<el-rate :model-value="currentReport.evaluation.score" disabled :size="15" /></p>
             <p>评价：{{ currentReport.evaluation.comment || '无' }}</p>
           </div>
+
+          <div class="report-section">
+            <h4>五、操作留痕</h4>
+            <el-timeline>
+              <el-timeline-item
+                v-for="(log, idx) in reportAuditLogs"
+                :key="idx"
+                :timestamp="log.time"
+                :type="logTypeColor(log.actionType)"
+                placement="top"
+                size="large"
+              >
+                <div class="log-content">
+                  <div class="log-text">{{ log.content }}</div>
+                  <div class="log-meta">
+                    <el-tag size="small">{{ log.operator }}</el-tag>
+                    <span style="margin-left: 8px; color: #909399; font-size: 12px;">{{ roleLabel(log.operatorRole) }}</span>
+                  </div>
+                </div>
+              </el-timeline-item>
+            </el-timeline>
+            <div v-if="reportAuditLogs.length === 0" class="empty-tip">暂无操作记录</div>
+          </div>
         </div>
       </template>
     </el-dialog>
@@ -385,25 +408,19 @@ const filteredPercent = computed(() => {
 })
 
 const filteredRanking = computed(() => {
-  return store.monthlyRanking.filter(r => {
-    if (filter.company && r.company !== filter.company) return false
-    return true
-  })
+  return store.monthlyRanking
 })
 
 const filteredClosedAlarms = computed(() => {
-  return store.closedAlarms.filter(a => {
-    if (filter.community && a.elevator?.buildingName !== filter.community) return false
-    if (filter.company && a.rescuer?.company !== filter.company) return false
-    if (filter.faultType && a.faultReason !== filter.faultType) return false
-    if (filter.emergency && a.emergencyLevel !== filter.emergency) return false
-    return true
-  })
+  return store.filteredAlarms.filter(a => a.status === 'closed')
 })
 
 const filteredEvaluation = computed(() => {
-  const stats = store.evaluationStats
-  return stats
+  return store.evaluationStats
+})
+
+const hasData = computed(() => {
+  return store.filteredAlarms.length > 0
 })
 
 const rankType = (index) => {
@@ -430,14 +447,49 @@ const emergencyLabel = (level) => {
   return map[level] || '一般'
 }
 
+const roleLabel = (role) => {
+  const map = { supervisor: '市场监管', property: '物业公司', maintenance: '维保单位', rescuer: '救援人员', system: '系统' }
+  return map[role] || role
+}
+
 const viewReport = (row) => {
   currentReport.value = row
   reportVisible.value = true
 }
 
+const reportAuditLogs = computed(() => {
+  if (!currentReport.value) return []
+  return store.getAlarmAuditLogs(currentReport.value.id)
+})
+
+const logTypeColor = (actionType) => {
+  const map = {
+    alarm: '',
+    dispatch: 'warning',
+    arrive: 'primary',
+    comfort: 'success',
+    escalate: 'danger',
+    backup_arrive: 'warning',
+    support_complete: 'info',
+    close: 'success'
+  }
+  return map[actionType] || ''
+}
+
 const initFaultChart = () => {
   if (!faultChartRef.value) return
   const chart = echarts.init(faultChartRef.value)
+  if (!hasData.value) {
+    chart.setOption({
+      title: {
+        text: '暂无数据',
+        left: 'center',
+        top: 'center',
+        textStyle: { color: '#909399', fontSize: 16 }
+      }
+    })
+    return
+  }
   const data = store.faultTypeStats
   chart.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
@@ -453,12 +505,23 @@ const initFaultChart = () => {
       },
       data
     }]
-  })
+  }, true)
 }
 
 const initTrendChart = () => {
   if (!trendChartRef.value) return
   const chart = echarts.init(trendChartRef.value)
+  if (!hasData.value) {
+    chart.setOption({
+      title: {
+        text: '暂无数据',
+        left: 'center',
+        top: 'center',
+        textStyle: { color: '#909399', fontSize: 16 }
+      }
+    })
+    return
+  }
   const data = store.avgResponseTimeTrend
   chart.setOption({
     tooltip: { trigger: 'axis', formatter: '{b}<br/>平均响应: {c}分钟' },
@@ -486,7 +549,7 @@ const initTrendChart = () => {
       lineStyle: { color: '#409eff', width: 2 },
       itemStyle: { color: '#409eff' }
     }]
-  })
+  }, true)
 }
 
 onMounted(() => {

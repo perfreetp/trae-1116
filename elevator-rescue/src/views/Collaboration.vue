@@ -65,7 +65,7 @@
               </div>
               <div v-if="alarm.isEscalated" class="event-escalated">
                 <el-icon><WarningFilled /></el-icon>
-                已升级支援
+                {{ store.getEscalationStatusLabel(alarm.escalationStatus) || '已升级支援' }}
               </div>
             </div>
           </div>
@@ -283,8 +283,8 @@
                   />
                   <el-divider direction="vertical" />
                   <el-statistic
-                    title="是否升级支援"
-                    :value="currentEvent.isEscalated ? '是' : '否'"
+                    title="支援状态"
+                    :value="currentEvent.isEscalated ? (store.getEscalationStatusLabel(currentEvent.escalationStatus) || '已升级') : '未升级'"
                     :value-style="{ color: currentEvent.isEscalated ? '#f56c6c' : '#67c23a' }"
                   />
                 </div>
@@ -292,6 +292,22 @@
                   <el-button type="warning" v-if="!currentEvent.isEscalated && isEventTimeout()" @click="triggerEscalate">
                     <el-icon><Warning /></el-icon>
                     触发升级支援
+                  </el-button>
+                  <el-button 
+                    type="success" 
+                    v-if="currentEvent.isEscalated && currentEvent.escalationStatus === 'backup_dispatched'" 
+                    @click="markBackupArrived"
+                  >
+                    <el-icon><LocationFilled /></el-icon>
+                    标记备援到场
+                  </el-button>
+                  <el-button 
+                    type="primary" 
+                    v-if="currentEvent.isEscalated && currentEvent.escalationStatus === 'backup_arrived' && currentEvent.status !== 'closed'" 
+                    @click="completeSupport"
+                  >
+                    <el-icon><Check /></el-icon>
+                    结束支援
                   </el-button>
                   <el-button type="primary" @click="$router.push('/statistics')">
                     <el-icon><TrendCharts /></el-icon>
@@ -336,63 +352,28 @@ const filteredEvents = computed(() => {
 
 const timeline = computed(() => {
   if (!currentEvent.value) return []
-  const items = []
-  
-  if (currentEvent.value.closeTime) {
-    items.push({
-      time: currentEvent.value.closeTime,
-      content: '案件已结案',
-      type: 'success',
-      meta: currentEvent.value.doorOpenResult === 'success' ? '开门结果：成功' : '开门结果：需支援'
-    })
-  }
-  
-  if (currentEvent.value.escalateTime) {
-    items.push({
-      time: currentEvent.value.escalateTime,
-      content: `升级支援请求，备援人员 ${currentEvent.value.backupRescuer?.name} 已派出`,
-      type: 'danger',
-      meta: `备援单位：${currentEvent.value.backupRescuer?.company}`
-    })
-  }
-  
-  if (currentEvent.value.arriveTime) {
-    const responseTime = dayjs(currentEvent.value.arriveTime).diff(dayjs(currentEvent.value.dispatchTime), 'minute')
-    items.push({
-      time: currentEvent.value.arriveTime,
-      content: `救援人员 ${currentEvent.value.rescuer?.name} 到场`,
-      type: 'primary',
-      meta: `响应时长：${responseTime} 分钟`
-    })
-  }
-  
-  if (currentEvent.value.dispatchTime) {
-    items.push({
-      time: currentEvent.value.dispatchTime,
-      content: `已派遣救援人员 ${currentEvent.value.rescuer?.name}`,
-      type: 'warning',
-      meta: `派遣单位：${currentEvent.value.rescuer?.company}`
-    })
-  }
-  
-  currentEvent.value.comfortRecords.forEach(r => {
-    items.push({
-      time: r.time,
-      content: `安抚记录：${r.content}`,
-      type: 'info',
-      meta: '物业人员操作'
-    })
-  })
-  
-  items.push({
-    time: currentEvent.value.alarmTime,
-    content: `接警登记：${currentEvent.value.reporterName} 报警，被困 ${currentEvent.value.trappedCount} 人`,
-    type: '',
-    meta: `紧急程度：${emergencyLabel(currentEvent.value.emergencyLevel)}`
-  })
-  
-  return items.sort((a, b) => dayjs(b.time).valueOf() - dayjs(a.time).valueOf())
+  const logs = store.getFilteredAuditLogs(currentEvent.value.id, currentRole.value)
+  return logs.map(log => ({
+    time: log.time,
+    content: log.content,
+    type: logTypeColor(log.actionType),
+    meta: `${log.operator}（${roleLabel(log.operatorRole)}）`
+  }))
 })
+
+const logTypeColor = (actionType) => {
+  const map = {
+    alarm: '',
+    dispatch: 'warning',
+    arrive: 'primary',
+    comfort: 'success',
+    escalate: 'danger',
+    backup_arrive: 'warning',
+    support_complete: 'info',
+    close: 'success'
+  }
+  return map[actionType] || ''
+}
 
 const handleRoleChange = (role) => {
   store.setRole(role)
@@ -491,6 +472,16 @@ const triggerEscalate = async () => {
       ElMessage.warning('暂无空闲的备援人员')
     }
   } catch {}
+}
+
+const markBackupArrived = () => {
+  store.markBackupArrived(currentEvent.value.id)
+  ElMessage.success('备援人员已到场')
+}
+
+const completeSupport = () => {
+  store.completeSupport(currentEvent.value.id)
+  ElMessage.success('支援任务已结束')
 }
 
 const tick = () => {

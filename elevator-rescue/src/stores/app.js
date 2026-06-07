@@ -13,6 +13,7 @@ const initialElevators = [
     capacity: '1000kg',
     speed: '2.0m/s',
     buildingName: '阳光花园1号楼',
+    area: '朝阳区',
     address: '朝阳区建国路88号',
     propertyCompany: '阳光物业有限公司',
     maintenanceCompany: '安捷电梯维保有限公司',
@@ -32,6 +33,7 @@ const initialElevators = [
     capacity: '1000kg',
     speed: '2.0m/s',
     buildingName: '阳光花园1号楼',
+    area: '朝阳区',
     address: '朝阳区建国路88号',
     propertyCompany: '阳光物业有限公司',
     maintenanceCompany: '安捷电梯维保有限公司',
@@ -51,6 +53,7 @@ const initialElevators = [
     capacity: '800kg',
     speed: '1.75m/s',
     buildingName: '翠湖苑2号楼',
+    area: '海淀区',
     address: '海淀区中关村大街100号',
     propertyCompany: '翠湖物业管理公司',
     maintenanceCompany: '奥的斯机电服务有限公司',
@@ -70,6 +73,7 @@ const initialElevators = [
     capacity: '1000kg',
     speed: '1.5m/s',
     buildingName: '金域华府3号楼',
+    area: '丰台区',
     address: '丰台区南四环西路16号',
     propertyCompany: '金域物业',
     maintenanceCompany: '日立电梯服务北京分公司',
@@ -89,6 +93,7 @@ const initialElevators = [
     capacity: '1000kg',
     speed: '2.0m/s',
     buildingName: '银河广场4号楼',
+    area: '西城区',
     address: '西城区金融街15号',
     propertyCompany: '银河商业物业管理公司',
     maintenanceCompany: '通力电梯北京服务中心',
@@ -102,11 +107,11 @@ const initialElevators = [
 ]
 
 const initialRescuers = [
-  { id: 'R001', name: '张工', phone: '138****1001', company: '安捷电梯维保有限公司', area: '朝阳区', status: 'idle', currentTask: null, estimatedArrival: 15 },
-  { id: 'R002', name: '李工', phone: '138****1002', company: '安捷电梯维保有限公司', area: '朝阳区', status: 'busy', currentTask: null, estimatedArrival: 20 },
-  { id: 'R003', name: '王工', phone: '138****1003', company: '奥的斯机电服务有限公司', area: '海淀区', status: 'idle', currentTask: null, estimatedArrival: 18 },
-  { id: 'R004', name: '赵工', phone: '138****1004', company: '日立电梯服务北京分公司', area: '丰台区', status: 'idle', currentTask: null, estimatedArrival: 22 },
-  { id: 'R005', name: '刘工', phone: '138****1005', company: '通力电梯北京服务中心', area: '西城区', status: 'busy', currentTask: null, estimatedArrival: 25 },
+  { id: 'R001', name: '张工', phone: '138****1001', company: '安捷电梯维保有限公司', area: '朝阳区', status: 'idle', currentTask: null, estimatedArrival: 15, isBackup: false },
+  { id: 'R002', name: '李工', phone: '138****1002', company: '安捷电梯维保有限公司', area: '朝阳区', status: 'busy', currentTask: null, estimatedArrival: 20, isBackup: false },
+  { id: 'R003', name: '王工', phone: '138****1003', company: '奥的斯机电服务有限公司', area: '海淀区', status: 'idle', currentTask: null, estimatedArrival: 18, isBackup: false },
+  { id: 'R004', name: '赵工', phone: '138****1004', company: '日立电梯服务北京分公司', area: '丰台区', status: 'idle', currentTask: null, estimatedArrival: 22, isBackup: false },
+  { id: 'R005', name: '刘工', phone: '138****1005', company: '通力电梯北京服务中心', area: '西城区', status: 'busy', currentTask: null, estimatedArrival: 25, isBackup: false },
   { id: 'R006', name: '陈工', phone: '138****1006', company: '应急备援一队', area: '朝阳区', status: 'idle', currentTask: null, isBackup: true, estimatedArrival: 12 },
   { id: 'R007', name: '周工', phone: '138****1007', company: '应急备援一队', area: '海淀区', status: 'idle', currentTask: null, isBackup: true, estimatedArrival: 15 },
   { id: 'R008', name: '吴工', phone: '138****1008', company: '应急备援二队', area: '丰台区', status: 'idle', currentTask: null, isBackup: true, estimatedArrival: 18 }
@@ -125,7 +130,7 @@ const initialAlarms = [
     trappedCount: 2,
     specialPerson: '无',
     emergencyLevel: 'normal',
-    status: 'dispatched',
+    status: 'closed',
     dispatchTime: '2026-06-07 08:31:00',
     rescuerId: 'R001',
     rescuer: initialRescuers[0],
@@ -143,6 +148,12 @@ const initialAlarms = [
     doorOpenResult: 'success',
     faultReason: 'door_system',
     faultReasonDetail: '门锁触点接触不良',
+    isEscalated: false,
+    escalateTime: null,
+    escalationStatus: null,
+    backupRescuerId: null,
+    backupRescuer: null,
+    backupArriveTime: null,
     evaluation: { score: 5, comment: '救援及时，态度很好', time: '2026-06-07 10:00:00' }
   },
   {
@@ -170,8 +181,11 @@ const initialAlarms = [
     faultReason: null,
     isEscalated: false,
     escalateTime: null,
+    escalationStatus: null,
     backupRescuerId: null,
-    backupRescuer: null
+    backupRescuer: null,
+    backupArriveTime: null,
+    evaluation: null
   }
 ]
 
@@ -180,12 +194,22 @@ export const useAppStore = defineStore('app', {
     elevators: initialElevators,
     rescuers: initialRescuers,
     alarms: initialAlarms,
+    auditLogs: [
+      { id: 'log1', alarmId: 'JJ20260607001', actionType: 'alarm', content: '接警登记成功，被困2人', operator: '系统', operatorRole: 'system', time: '2026-06-07 08:30:00' },
+      { id: 'log2', alarmId: 'JJ20260607001', actionType: 'dispatch', content: '已派遣救援人员张工（安捷电梯维保有限公司）', operator: '调度员', operatorRole: 'maintenance', time: '2026-06-07 08:31:00' },
+      { id: 'log3', alarmId: 'JJ20260607001', actionType: 'comfort', content: '安抚记录：安抚被困人员不要慌张，救援人员已在途中', operator: '物业人员', operatorRole: 'property', time: '2026-06-07 08:35:00' },
+      { id: 'log4', alarmId: 'JJ20260607001', actionType: 'comfort', content: '安抚记录：告知救援人员已到楼下，正在准备工具', operator: '物业人员', operatorRole: 'property', time: '2026-06-07 08:50:00' },
+      { id: 'log5', alarmId: 'JJ20260607001', actionType: 'arrive', content: '救援人员张工已到场', operator: '救援人员', operatorRole: 'rescuer', time: '2026-06-07 08:55:00' },
+      { id: 'log6', alarmId: 'JJ20260607001', actionType: 'close', content: '案件结案，开门结果：成功', operator: '救援人员', operatorRole: 'rescuer', time: '2026-06-07 09:30:00' },
+      { id: 'log7', alarmId: 'JJ20260607002', actionType: 'alarm', content: '接警登记成功，被困3人', operator: '系统', operatorRole: 'system', time: '2026-06-07 09:20:00' },
+      { id: 'log8', alarmId: 'JJ20260607002', actionType: 'dispatch', content: '已派遣救援人员王工（奥的斯机电服务有限公司）', operator: '调度员', operatorRole: 'maintenance', time: '2026-06-07 09:21:00' }
+    ],
     currentRole: 'supervisor',
     statsFilter: {
-      buildingName: '',
-      maintenanceCompany: '',
-      faultReason: '',
-      emergencyLevel: ''
+      community: '',
+      company: '',
+      faultType: '',
+      emergency: ''
     },
     comfortTemplates: [
       '您好，我们已经接到您的求助电话，请不要慌张，保持冷静。',
@@ -206,7 +230,13 @@ export const useAppStore = defineStore('app', {
       { value: 'normal', label: '一般' },
       { value: 'urgent', label: '紧急' },
       { value: 'critical', label: '特急' }
-    ]
+    ],
+    escalationStatusLabels: {
+      requested: '已申请支援',
+      backup_dispatched: '备援已派出',
+      backup_arrived: '备援已到场',
+      completed: '支援结束'
+    }
   }),
 
   getters: {
@@ -227,10 +257,9 @@ export const useAppStore = defineStore('app', {
       })
     },
 
-    escalatedAlarms: (state) => state.alarms.filter(a => a.isEscalated),
+    escalatedAlarms: (state) => state.alarms.filter(a => a.isEscalated && a.status !== 'closed'),
 
     backupRescuers: (state) => state.rescuers.filter(r => r.isBackup),
-
     idleRescuers: (state) => state.rescuers.filter(r => r.status === 'idle'),
 
     getNearbyRescuers: (state) => (area, includeBackup = true) => {
@@ -241,15 +270,50 @@ export const useAppStore = defineStore('app', {
       }).sort((a, b) => a.estimatedArrival - b.estimatedArrival)
     },
 
+    getRecommendedRescuer: (state) => (alarm) => {
+      if (!alarm.elevator) return null
+      const area = alarm.elevator.area
+      const company = alarm.elevator.maintenanceCompany
+      
+      const companyRescuers = state.rescuers.filter(r => 
+        r.status === 'idle' && !r.isBackup && r.company === company
+      )
+      
+      if (companyRescuers.length > 0) {
+        return companyRescuers.sort((a, b) => a.estimatedArrival - b.estimatedArrival)[0]
+      }
+      
+      const areaRescuers = state.rescuers.filter(r => 
+        r.status === 'idle' && !r.isBackup && r.area === area
+      )
+      if (areaRescuers.length > 0) {
+        return areaRescuers.sort((a, b) => a.estimatedArrival - b.estimatedArrival)[0]
+      }
+      
+      const backups = state.rescuers.filter(r => r.status === 'idle' && r.isBackup && r.area === area)
+      return backups.length > 0 ? backups.sort((a, b) => a.estimatedArrival - b.estimatedArrival)[0] : null
+    },
+
+    areas: (state) => [...new Set(state.elevators.map(e => e.area))],
     buildingNames: (state) => [...new Set(state.elevators.map(e => e.buildingName))],
     maintenanceCompanies: (state) => [...new Set(state.elevators.map(e => e.maintenanceCompany))],
 
+    alarmsByArea: (state) => {
+      const grouped = {}
+      state.alarms.filter(a => a.status !== 'closed').forEach(alarm => {
+        const area = alarm.elevator?.area || '未分配'
+        if (!grouped[area]) grouped[area] = []
+        grouped[area].push(alarm)
+      })
+      return grouped
+    },
+
     filteredAlarms: (state) => {
       return state.alarms.filter(a => {
-        if (state.statsFilter.buildingName && a.elevator?.buildingName !== state.statsFilter.buildingName) return false
-        if (state.statsFilter.maintenanceCompany && a.elevator?.maintenanceCompany !== state.statsFilter.maintenanceCompany) return false
-        if (state.statsFilter.faultReason && a.faultReason !== state.statsFilter.faultReason) return false
-        if (state.statsFilter.emergencyLevel && a.emergencyLevel !== state.statsFilter.emergencyLevel) return false
+        if (state.statsFilter.community && a.elevator?.buildingName !== state.statsFilter.community) return false
+        if (state.statsFilter.company && a.elevator?.maintenanceCompany !== state.statsFilter.company) return false
+        if (state.statsFilter.faultType && a.faultReason !== state.statsFilter.faultType) return false
+        if (state.statsFilter.emergency && a.emergencyLevel !== state.statsFilter.emergency) return false
         return true
       })
     },
@@ -280,10 +344,10 @@ export const useAppStore = defineStore('app', {
     monthlyRanking: (state) => {
       const companyStats = {}
       const filtered = state.alarms.filter(a => {
-        if (state.statsFilter.buildingName && a.elevator?.buildingName !== state.statsFilter.buildingName) return false
-        if (state.statsFilter.maintenanceCompany && a.elevator?.maintenanceCompany !== state.statsFilter.maintenanceCompany) return false
-        if (state.statsFilter.faultReason && a.faultReason !== state.statsFilter.faultReason) return false
-        if (state.statsFilter.emergencyLevel && a.emergencyLevel !== state.statsFilter.emergencyLevel) return false
+        if (state.statsFilter.community && a.elevator?.buildingName !== state.statsFilter.community) return false
+        if (state.statsFilter.company && a.elevator?.maintenanceCompany !== state.statsFilter.company) return false
+        if (state.statsFilter.faultType && a.faultReason !== state.statsFilter.faultType) return false
+        if (state.statsFilter.emergency && a.emergencyLevel !== state.statsFilter.emergency) return false
         return true
       })
       filtered.filter(a => a.status === 'closed').forEach(alarm => {
@@ -314,10 +378,10 @@ export const useAppStore = defineStore('app', {
     faultTypeStats: (state) => {
       const stats = {}
       const filtered = state.alarms.filter(a => {
-        if (state.statsFilter.buildingName && a.elevator?.buildingName !== state.statsFilter.buildingName) return false
-        if (state.statsFilter.maintenanceCompany && a.elevator?.maintenanceCompany !== state.statsFilter.maintenanceCompany) return false
-        if (state.statsFilter.faultReason && a.faultReason !== state.statsFilter.faultReason) return false
-        if (state.statsFilter.emergencyLevel && a.emergencyLevel !== state.statsFilter.emergencyLevel) return false
+        if (state.statsFilter.community && a.elevator?.buildingName !== state.statsFilter.community) return false
+        if (state.statsFilter.company && a.elevator?.maintenanceCompany !== state.statsFilter.company) return false
+        if (state.statsFilter.faultType && a.faultReason !== state.statsFilter.faultType) return false
+        if (state.statsFilter.emergency && a.emergencyLevel !== state.statsFilter.emergency) return false
         return true
       })
       filtered.filter(a => a.faultReason).forEach(alarm => {
@@ -335,10 +399,10 @@ export const useAppStore = defineStore('app', {
       let total = 0
       let sum = 0
       const filtered = state.alarms.filter(a => {
-        if (state.statsFilter.buildingName && a.elevator?.buildingName !== state.statsFilter.buildingName) return false
-        if (state.statsFilter.maintenanceCompany && a.elevator?.maintenanceCompany !== state.statsFilter.maintenanceCompany) return false
-        if (state.statsFilter.faultReason && a.faultReason !== state.statsFilter.faultReason) return false
-        if (state.statsFilter.emergencyLevel && a.emergencyLevel !== state.statsFilter.emergencyLevel) return false
+        if (state.statsFilter.community && a.elevator?.buildingName !== state.statsFilter.community) return false
+        if (state.statsFilter.company && a.elevator?.maintenanceCompany !== state.statsFilter.company) return false
+        if (state.statsFilter.faultType && a.faultReason !== state.statsFilter.faultType) return false
+        if (state.statsFilter.emergency && a.emergencyLevel !== state.statsFilter.emergency) return false
         return true
       })
       filtered.filter(a => a.evaluation).forEach(alarm => {
@@ -364,13 +428,51 @@ export const useAppStore = defineStore('app', {
       for (let i = 6; i >= 0; i--) {
         dates.push(today.subtract(i, 'day').format('MM-DD'))
       }
+      const filtered = state.alarms.filter(a => {
+        if (state.statsFilter.community && a.elevator?.buildingName !== state.statsFilter.community) return false
+        if (state.statsFilter.company && a.elevator?.maintenanceCompany !== state.statsFilter.company) return false
+        if (state.statsFilter.faultType && a.faultReason !== state.statsFilter.faultType) return false
+        if (state.statsFilter.emergency && a.emergencyLevel !== state.statsFilter.emergency) return false
+        return true
+      })
+      if (filtered.length === 0) {
+        return dates.map(date => ({ date, time: 0 }))
+      }
       return dates.map(date => {
         return { date, time: 15 + Math.floor(Math.random() * 20) }
       })
+    },
+
+    getAlarmAuditLogs: (state) => (alarmId) => {
+      return state.auditLogs.filter(log => log.alarmId === alarmId)
+        .sort((a, b) => dayjs(b.time).valueOf() - dayjs(a.time).valueOf())
+    },
+
+    getFilteredAuditLogs: (state) => (alarmId, role) => {
+      const logs = state.auditLogs.filter(log => log.alarmId === alarmId)
+      if (role === 'supervisor') return logs
+      if (role === 'property') return logs.filter(l => ['comfort', 'alarm', 'close'].includes(l.actionType))
+      if (role === 'maintenance') return logs.filter(l => ['dispatch', 'arrive', 'escalate', 'close'].includes(l.actionType))
+      if (role === 'rescuer') return logs.filter(l => ['dispatch', 'arrive', 'escalate', 'backup_arrive'].includes(l.actionType))
+      return logs
     }
   },
 
   actions: {
+    addAuditLog(alarmId, actionType, content, operator, operatorRole) {
+      const log = {
+        id: generateId(),
+        alarmId,
+        actionType,
+        content,
+        operator,
+        operatorRole,
+        time: dayjs().format('YYYY-MM-DD HH:mm:ss')
+      }
+      this.auditLogs.unshift(log)
+      return log
+    },
+
     addAlarm(alarmData) {
       const newAlarm = {
         id: generateId(),
@@ -391,11 +493,14 @@ export const useAppStore = defineStore('app', {
         evaluation: null,
         isEscalated: false,
         escalateTime: null,
+        escalationStatus: null,
         backupRescuerId: null,
         backupRescuer: null,
+        backupArriveTime: null,
         ...alarmData
       }
       this.alarms.unshift(newAlarm)
+      this.addAuditLog(newAlarm.id, 'alarm', `接警登记成功，被困${newAlarm.trappedCount}人`, '系统', 'system')
       return newAlarm
     },
 
@@ -409,6 +514,7 @@ export const useAppStore = defineStore('app', {
         alarm.rescuer = rescuer
         rescuer.status = 'busy'
         rescuer.currentTask = alarmId
+        this.addAuditLog(alarmId, 'dispatch', `已派遣救援人员${rescuer.name}（${rescuer.company}）`, '调度员', 'maintenance')
       }
     },
 
@@ -418,10 +524,29 @@ export const useAppStore = defineStore('app', {
       if (alarm && backupRescuer) {
         alarm.isEscalated = true
         alarm.escalateTime = dayjs().format('YYYY-MM-DD HH:mm:ss')
+        alarm.escalationStatus = 'backup_dispatched'
         alarm.backupRescuerId = backupRescuerId
         alarm.backupRescuer = backupRescuer
         backupRescuer.status = 'busy'
         backupRescuer.currentTask = alarmId
+        this.addAuditLog(alarmId, 'escalate', `申请支援成功，备援人员${backupRescuer.name}已派出`, '监管员', 'supervisor')
+      }
+    },
+
+    markBackupArrived(alarmId) {
+      const alarm = this.alarms.find(a => a.id === alarmId)
+      if (alarm) {
+        alarm.escalationStatus = 'backup_arrived'
+        alarm.backupArriveTime = dayjs().format('YYYY-MM-DD HH:mm:ss')
+        this.addAuditLog(alarmId, 'backup_arrive', `备援人员${alarm.backupRescuer?.name}已到场`, '备援人员', 'rescuer')
+      }
+    },
+
+    completeSupport(alarmId) {
+      const alarm = this.alarms.find(a => a.id === alarmId)
+      if (alarm) {
+        alarm.escalationStatus = 'completed'
+        this.addAuditLog(alarmId, 'support_complete', '支援任务结束', '调度员', 'maintenance')
       }
     },
 
@@ -430,6 +555,7 @@ export const useAppStore = defineStore('app', {
       if (alarm) {
         alarm.status = 'arrived'
         alarm.arriveTime = dayjs().format('YYYY-MM-DD HH:mm:ss')
+        this.addAuditLog(alarmId, 'arrive', `救援人员${alarm.rescuer?.name}已到场`, '救援人员', 'rescuer')
       }
     },
 
@@ -443,10 +569,12 @@ export const useAppStore = defineStore('app', {
     addComfortRecord(alarmId, content) {
       const alarm = this.alarms.find(a => a.id === alarmId)
       if (alarm) {
-        alarm.comfortRecords.push({
+        const record = {
           time: dayjs().format('YYYY-MM-DD HH:mm:ss'),
           content
-        })
+        }
+        alarm.comfortRecords.push(record)
+        this.addAuditLog(alarmId, 'comfort', `安抚记录：${content.slice(0, 30)}${content.length > 30 ? '...' : ''}`, '物业人员', 'property')
       }
     },
 
@@ -459,6 +587,9 @@ export const useAppStore = defineStore('app', {
         alarm.status = 'closed'
         alarm.finishTime = dayjs().format('YYYY-MM-DD HH:mm:ss')
         alarm.closeTime = dayjs().format('YYYY-MM-DD HH:mm:ss')
+        if (alarm.escalationStatus) {
+          alarm.escalationStatus = 'completed'
+        }
         if (alarm.rescuerId) {
           const rescuer = this.rescuers.find(r => r.id === alarm.rescuerId)
           if (rescuer) {
@@ -473,6 +604,7 @@ export const useAppStore = defineStore('app', {
             backupRescuer.currentTask = null
           }
         }
+        this.addAuditLog(alarmId, 'close', `案件结案，开门结果：${data.doorOpenResult === 'success' ? '成功' : '需支援'}`, '救援人员', 'rescuer')
       }
     },
 
@@ -497,10 +629,10 @@ export const useAppStore = defineStore('app', {
 
     resetStatsFilter() {
       this.statsFilter = {
-        buildingName: '',
-        maintenanceCompany: '',
-        faultReason: '',
-        emergencyLevel: ''
+        community: '',
+        company: '',
+        faultType: '',
+        emergency: ''
       }
     },
 
@@ -524,10 +656,17 @@ export const useAppStore = defineStore('app', {
       return el ? el.label : value
     },
 
+    getEscalationStatusLabel(value) {
+      return this.escalationStatusLabels[value] || value
+    },
+
     getAlarmTimeline(alarm) {
       const timeline = []
       if (alarm.closeTime) {
         timeline.push({ time: alarm.closeTime, content: '案件已结案', type: 'success' })
+      }
+      if (alarm.backupArriveTime) {
+        timeline.push({ time: alarm.backupArriveTime, content: `备援人员${alarm.backupRescuer?.name}已到场`, type: 'warning' })
       }
       if (alarm.escalateTime) {
         timeline.push({ time: alarm.escalateTime, content: `已升级支援，派备援人员 ${alarm.backupRescuer?.name}`, type: 'danger' })
