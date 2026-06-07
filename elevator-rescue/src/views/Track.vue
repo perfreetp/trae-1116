@@ -3,10 +3,19 @@
     <el-row :gutter="20">
       <el-col :span="8">
         <div class="card-section">
-          <div class="card-title">处置单列表</div>
+          <div class="card-title">
+            处置单列表
+            <el-select v-model="statusFilter" size="small" style="margin-left: 10px; width: 120px">
+              <el-option label="全部" value="" />
+              <el-option label="待派单" value="pending" />
+              <el-option label="已派遣" value="dispatched" />
+              <el-option label="已到场" value="arrived" />
+              <el-option label="已结案" value="closed" />
+            </el-select>
+          </div>
           <div class="order-list">
             <div
-              v-for="alarm in activeAlarms"
+              v-for="alarm in filteredAlarms"
               :key="alarm.id"
               class="order-item"
               :class="{ active: currentAlarm?.id === alarm.id }"
@@ -14,14 +23,21 @@
             >
               <div class="order-header">
                 <span class="order-no">{{ alarm.alarmNo }}</span>
-                <el-tag size="small" :type="statusType(alarm.status)">
-                  {{ statusLabel(alarm.status) }}
-                </el-tag>
+                <div style="display: flex; gap: 4px">
+                  <el-tag v-if="alarm.isEscalated" size="small" type="danger" effect="dark">支援</el-tag>
+                  <el-tag size="small" :type="statusType(alarm.status)">
+                    {{ statusLabel(alarm.status) }}
+                  </el-tag>
+                </div>
               </div>
               <div class="order-building">{{ alarm.elevator?.buildingName }}</div>
               <div class="order-info">
                 <span>被困 {{ alarm.trappedCount }} 人</span>
                 <span>{{ alarm.alarmTime }}</span>
+              </div>
+              <div v-if="alarm.status === 'dispatched' && isTimeout(alarm)" class="order-warning">
+                <el-icon><Warning /></el-icon>
+                已超时 {{ getTimeoutMinutes(alarm) }} 分钟
               </div>
             </div>
           </div>
@@ -38,6 +54,9 @@
             <div class="card-title">
               <el-icon><Document /></el-icon>
               处置单详情 - {{ currentAlarm.alarmNo }}
+              <el-tag v-if="currentAlarm.isEscalated" size="small" type="danger" style="margin-left: 10px">
+                已升级支援
+              </el-tag>
             </div>
             <el-descriptions :column="3" border size="small">
               <el-descriptions-item label="电梯编号">{{ currentAlarm.elevator?.elevatorNo }}</el-descriptions-item>
@@ -50,8 +69,14 @@
                   {{ emergencyLabel(currentAlarm.emergencyLevel) }}
                 </el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="救援人员">{{ currentAlarm.rescuer?.name }}</el-descriptions-item>
-              <el-descriptions-item label="维保单位">{{ currentAlarm.elevator?.maintenanceCompany }}</el-descriptions-item>
+              <el-descriptions-item label="救援人员">
+                <span v-if="currentAlarm.rescuer">{{ currentAlarm.rescuer?.name }}</span>
+                <span v-else style="color: #909399">待派遣</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="备援人员">
+                <span v-if="currentAlarm.backupRescuer">{{ currentAlarm.backupRescuer?.name }}</span>
+                <span v-else style="color: #909399">-</span>
+              </el-descriptions-item>
               <el-descriptions-item label="状态">
                 <el-tag :type="statusType(currentAlarm.status)" size="small">
                   {{ statusLabel(currentAlarm.status) }}
@@ -144,34 +169,13 @@
                 </div>
                 <el-timeline>
                   <el-timeline-item
-                    v-if="currentAlarm.closeTime"
-                    :timestamp="currentAlarm.closeTime"
-                    type="success"
+                    v-for="(item, idx) in timeline"
+                    :key="idx"
+                    :timestamp="item.time"
+                    :type="item.type"
                     placement="top"
                   >
-                    案件已结案
-                  </el-timeline-item>
-                  <el-timeline-item
-                    v-if="currentAlarm.arriveTime"
-                    :timestamp="currentAlarm.arriveTime"
-                    type="primary"
-                    placement="top"
-                  >
-                    救援人员到场
-                  </el-timeline-item>
-                  <el-timeline-item
-                    v-if="currentAlarm.dispatchTime"
-                    :timestamp="currentAlarm.dispatchTime"
-                    type="warning"
-                    placement="top"
-                  >
-                    已派遣 {{ currentAlarm.rescuer?.name }}
-                  </el-timeline-item>
-                  <el-timeline-item
-                    :timestamp="currentAlarm.alarmTime"
-                    placement="top"
-                  >
-                    接警登记
+                    {{ item.content }}
                   </el-timeline-item>
                 </el-timeline>
               </div>
@@ -230,6 +234,16 @@
                   <el-descriptions-item label="原因说明">
                     {{ currentAlarm.faultReasonDetail || '-' }}
                   </el-descriptions-item>
+                  <el-descriptions-item label="是否超时">
+                    <el-tag :type="isTimeout(currentAlarm) ? 'danger' : 'success'">
+                      {{ isTimeout(currentAlarm) ? '是' : '否' }}
+                    </el-tag>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="是否升级支援">
+                    <el-tag :type="currentAlarm.isEscalated ? 'danger' : 'success'">
+                      {{ currentAlarm.isEscalated ? '是' : '否' }}
+                    </el-tag>
+                  </el-descriptions-item>
                   <el-descriptions-item label="结案时间">
                     {{ currentAlarm.closeTime }}
                   </el-descriptions-item>
@@ -281,15 +295,18 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { ElMessage } from 'element-plus'
+import dayjs from 'dayjs'
 
 const store = useAppStore()
 
+const statusFilter = ref('')
 const currentAlarm = ref(null)
 const showPersonDialog = ref(false)
 const comfortContent = ref('')
+const tickTimer = ref(null)
 
 const personForm = reactive({
   name: '',
@@ -304,8 +321,14 @@ const closeForm = reactive({
   faultReasonDetail: ''
 })
 
-const activeAlarms = computed(() => {
-  return store.alarms.filter(a => ['dispatched', 'arrived', 'closed'].includes(a.status))
+const filteredAlarms = computed(() => {
+  if (!statusFilter.value) return store.alarms
+  return store.alarms.filter(a => a.status === statusFilter.value)
+})
+
+const timeline = computed(() => {
+  if (!currentAlarm.value) return []
+  return store.getAlarmTimeline(currentAlarm.value)
 })
 
 const canClose = computed(() => {
@@ -342,6 +365,16 @@ const emergencyType = (level) => {
 const emergencyLabel = (level) => {
   const map = { normal: '一般', urgent: '紧急', critical: '特急' }
   return map[level] || '一般'
+}
+
+const isTimeout = (alarm) => {
+  if (!alarm.dispatchTime || alarm.status === 'arrived' || alarm.status === 'closed') return false
+  return dayjs().diff(dayjs(alarm.dispatchTime), 'minute') > 30
+}
+
+const getTimeoutMinutes = (alarm) => {
+  if (!alarm.dispatchTime) return 0
+  return Math.max(0, dayjs().diff(dayjs(alarm.dispatchTime), 'minute') - 30)
 }
 
 const useTemplate = (tpl) => {
@@ -389,6 +422,19 @@ const closeAlarm = () => {
   })
   ElMessage.success('案件已结案，数据已同步至统计分析')
 }
+
+const tick = () => {
+  // 触发响应式更新
+  store.alarms.forEach(a => {})
+}
+
+onMounted(() => {
+  tickTimer.value = setInterval(tick, 1000)
+})
+
+onUnmounted(() => {
+  if (tickTimer.value) clearInterval(tickTimer.value)
+})
 </script>
 
 <style scoped>
@@ -441,6 +487,18 @@ const closeAlarm = () => {
   color: #909399;
   display: flex;
   justify-content: space-between;
+}
+
+.order-warning {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: #fef0f0;
+  color: #f56c6c;
+  font-size: 12px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .empty-state {

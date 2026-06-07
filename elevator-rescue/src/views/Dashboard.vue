@@ -17,16 +17,16 @@
       </el-col>
       <el-col :span="6">
         <div class="stat-card">
-          <el-icon :size="28" color="#67c23a"><CircleCheck /></el-icon>
-          <div class="stat-value" style="color: #67c23a">{{ store.todayClosedCount }}</div>
-          <div class="stat-label">今日结案</div>
+          <el-icon :size="28" color="#f56c6c"><Warning /></el-icon>
+          <div class="stat-value" style="color: #f56c6c">{{ store.escalatedAlarms.length }}</div>
+          <div class="stat-label">需支援</div>
         </div>
       </el-col>
       <el-col :span="6">
         <div class="stat-card">
-          <el-icon :size="28" color="#f56c6c"><Timer /></el-icon>
-          <div class="stat-value" style="color: #f56c6c">{{ store.avgResponseTime }}<small style="font-size: 14px">分钟</small></div>
-          <div class="stat-label">平均响应时长</div>
+          <el-icon :size="28" color="#67c23a"><CircleCheck /></el-icon>
+          <div class="stat-value" style="color: #67c23a">{{ store.todayClosedCount }}</div>
+          <div class="stat-label">今日结案</div>
         </div>
       </el-col>
     </el-row>
@@ -78,12 +78,23 @@
 
       <el-col :span="8">
         <div class="card-section">
-          <div class="card-title">超时预警</div>
-          <div v-if="store.timeoutAlarms.length === 0" class="empty-tip">
-            <el-empty description="暂无超时警情" :image-size="80" />
+          <div class="card-title">超时预警 & 支援请求</div>
+          <div v-if="store.timeoutAlarms.length === 0 && store.escalatedAlarms.length === 0" class="empty-tip">
+            <el-empty description="暂无预警和支援请求" :image-size="80" />
           </div>
           <div v-else>
-            <div v-for="alarm in store.timeoutAlarms" :key="alarm.id" class="timeout-item">
+            <div v-for="alarm in store.escalatedAlarms" :key="alarm.id" class="timeout-item escalated">
+              <div class="timeout-header">
+                <el-tag type="danger" effect="dark" class="warning-badge">支援请求</el-tag>
+                <span class="timeout-no">{{ alarm.alarmNo }}</span>
+              </div>
+              <div class="timeout-info">
+                <p><el-icon><Location /></el-icon> {{ alarm.elevator?.buildingName }}</p>
+                <p><el-icon><User /></el-icon> 被困 {{ alarm.trappedCount }} 人</p>
+                <p><el-icon><Phone /></el-icon> 备援：{{ alarm.backupRescuer?.name || '-' }}</p>
+              </div>
+            </div>
+            <div v-for="alarm in store.timeoutAlarms.filter(a => !a.isEscalated)" :key="alarm.id" class="timeout-item">
               <div class="timeout-header">
                 <el-tag type="danger" effect="dark" class="warning-badge">超时预警</el-tag>
                 <span class="timeout-no">{{ alarm.alarmNo }}</span>
@@ -104,8 +115,14 @@
               <div class="rescuer-info">
                 <el-avatar :size="36" :icon="User" />
                 <div>
-                  <div class="rescuer-name">{{ rescuer.name }}</div>
+                  <div class="rescuer-name">
+                    {{ rescuer.name }}
+                    <el-tag v-if="rescuer.isBackup" size="small" type="danger" style="margin-left: 4px">备援</el-tag>
+                  </div>
                   <div class="rescuer-company">{{ rescuer.company }}</div>
+                  <div v-if="rescuer.isBackup && rescuer.status === 'idle'" class="rescuer-area">
+                    区域：{{ rescuer.area }} · 预计 {{ rescuer.estimatedArrival }} 分钟到达
+                  </div>
                 </div>
               </div>
               <el-tag :type="rescuer.status === 'idle' ? 'success' : 'warning'" size="small">
@@ -261,6 +278,17 @@ onMounted(() => {
   color: #606266;
 }
 
+.timeout-item.escalated {
+  background: #fff1f0;
+  border-left-color: #ff4d4f;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .rescuer-list {
   display: flex;
   flex-direction: column;
@@ -287,5 +315,11 @@ onMounted(() => {
 .rescuer-company {
   font-size: 12px;
   color: #909399;
+}
+
+.rescuer-area {
+  font-size: 11px;
+  color: #f56c6c;
+  margin-top: 2px;
 }
 </style>

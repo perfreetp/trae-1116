@@ -31,6 +31,11 @@ const routes = [
     component: () => import('@/views/Track.vue')
   },
   {
+    path: '/collaboration',
+    name: 'Collaboration',
+    component: () => import('@/views/Collaboration.vue')
+  },
+  {
     path: '/maintenance',
     name: 'Maintenance',
     component: () => import('@/views/Maintenance.vue')

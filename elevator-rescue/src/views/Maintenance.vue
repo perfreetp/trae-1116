@@ -32,13 +32,13 @@
             </el-select>
           </el-form-item>
           <el-form-item>
-            <el-button type="primary"><el-icon><Search /></el-icon>查询</el-button>
+            <el-button type="primary" @click="handleSearch"><el-icon><Search /></el-icon>查询</el-button>
             <el-button @click="resetSearch">重置</el-button>
           </el-form-item>
         </el-form>
       </div>
 
-      <el-table :data="maintenanceRecords" stripe>
+      <el-table :data="filteredRecords" stripe>
         <el-table-column prop="recordNo" label="维保单号" width="140" />
         <el-table-column label="电梯信息" width="200">
           <template #default="{ row }">
@@ -67,6 +67,9 @@
           </template>
         </el-table-column>
       </el-table>
+      <div style="margin-top: 10px; text-align: right; color: #909399; font-size: 13px">
+        共 {{ filteredRecords.length }} 条记录
+      </div>
     </div>
 
     <el-dialog v-model="detailVisible" title="维保记录详情" width="650px">
@@ -106,6 +109,7 @@
 <script setup>
 import { ref, reactive, computed } from 'vue'
 import { useAppStore } from '@/stores/app'
+import { ElMessage } from 'element-plus'
 
 const store = useAppStore()
 
@@ -123,7 +127,7 @@ const maintenanceCompanies = computed(() => {
   return [...new Set(store.elevators.map(e => e.maintenanceCompany))]
 })
 
-const mockRecords = [
+const allRecords = ref([
   {
     recordNo: 'WB20260601001',
     elevatorNo: 'DT-001-A01',
@@ -195,14 +199,71 @@ const mockRecords = [
     statusLabel: '待执行',
     remark: '',
     items: []
+  },
+  {
+    recordNo: 'WB20260515001',
+    elevatorNo: 'DT-002-B01',
+    buildingName: '翠湖苑2号楼',
+    type: 'half_month',
+    typeLabel: '半月保',
+    planDate: '2026-05-15',
+    actualDate: '2026-05-15',
+    maintenanceCompany: '奥的斯机电服务有限公司',
+    maintainer: '王工',
+    status: 'done',
+    statusLabel: '已完成',
+    remark: '正常维护',
+    items: [
+      { name: '轿厢内选层按钮', result: '正常' },
+      { name: '厅门门锁', result: '正常' },
+      { name: '安全触板/光幕', result: '正常' }
+    ]
+  },
+  {
+    recordNo: 'WB20260410001',
+    elevatorNo: 'DT-002-B01',
+    buildingName: '翠湖苑2号楼',
+    type: 'quarter',
+    typeLabel: '季度保',
+    planDate: '2026-04-10',
+    actualDate: '2026-04-12',
+    maintenanceCompany: '奥的斯机电服务有限公司',
+    maintainer: '王工',
+    status: 'done',
+    statusLabel: '已完成',
+    remark: '延期2天完成',
+    items: [
+      { name: '限速器', result: '正常' },
+      { name: '安全钳', result: '正常' },
+      { name: '缓冲器', result: '正常' }
+    ]
   }
-]
+])
 
-const maintenanceRecords = ref(mockRecords)
+const filteredRecords = ref([...allRecords.value])
 
 const statusType = (status) => {
   const map = { done: 'success', pending: 'warning', overdue: 'danger' }
   return map[status] || ''
+}
+
+const handleSearch = () => {
+  filteredRecords.value = allRecords.value.filter(record => {
+    if (searchForm.elevatorNo && !record.elevatorNo.toLowerCase().includes(searchForm.elevatorNo.toLowerCase())) {
+      return false
+    }
+    if (searchForm.maintenanceCompany && record.maintenanceCompany !== searchForm.maintenanceCompany) {
+      return false
+    }
+    if (searchForm.type && record.type !== searchForm.type) {
+      return false
+    }
+    if (searchForm.status && record.status !== searchForm.status) {
+      return false
+    }
+    return true
+  })
+  ElMessage.success(`查询完成，共找到 ${filteredRecords.value.length} 条记录`)
 }
 
 const resetSearch = () => {
@@ -210,6 +271,8 @@ const resetSearch = () => {
   searchForm.maintenanceCompany = ''
   searchForm.type = ''
   searchForm.status = ''
+  filteredRecords.value = [...allRecords.value]
+  ElMessage.info('已重置筛选条件')
 }
 
 const viewDetail = (row) => {

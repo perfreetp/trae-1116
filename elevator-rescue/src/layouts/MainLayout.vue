@@ -30,6 +30,10 @@
           <el-icon><Timer /></el-icon>
           <span>处置跟踪</span>
         </el-menu-item>
+        <el-menu-item index="/collaboration">
+          <el-icon><DataBoard /></el-icon>
+          <span>协同工作台</span>
+        </el-menu-item>
         <el-menu-item index="/maintenance">
           <el-icon><Tools /></el-icon>
           <span>维保记录</span>
@@ -97,6 +101,7 @@ const menuTitles = {
   '/elevator': '设备档案',
   '/dispatch': '救援调度',
   '/track': '处置跟踪',
+  '/collaboration': '协同工作台',
   '/maintenance': '维保记录',
   '/complaint': '投诉回访',
   '/statistics': '考核统计'
