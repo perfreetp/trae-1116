@@ -370,14 +370,17 @@ const jumpToTrack = () => router.push('/track')
 const jumpToStatistics = () => router.push('/statistics')
 
 const goToDispatch = (alarm) => {
+  store.setSelectedAlarm(alarm.id)
   router.push('/dispatch')
 }
 
 const goToCollaboration = (alarm) => {
+  store.setSelectedAlarm(alarm.id)
   router.push('/collaboration')
 }
 
 const goToStatistics = (alarm) => {
+  store.setReportAlarm(alarm.id)
   router.push('/statistics')
 }
 

@@ -204,12 +204,17 @@ export const useAppStore = defineStore('app', {
       { id: 'log7', alarmId: 'JJ20260607002', actionType: 'alarm', content: '接警登记成功，被困3人', operator: '系统', operatorRole: 'system', time: '2026-06-07 09:20:00' },
       { id: 'log8', alarmId: 'JJ20260607002', actionType: 'dispatch', content: '已派遣救援人员王工（奥的斯机电服务有限公司）', operator: '调度员', operatorRole: 'maintenance', time: '2026-06-07 09:21:00' }
     ],
+    selectedAlarmId: null,
+    reportAlarmId: null,
     currentRole: 'supervisor',
     statsFilter: {
       community: '',
       company: '',
       faultType: '',
-      emergency: ''
+      emergency: '',
+      timeRange: 'all',
+      startTime: '',
+      endTime: ''
     },
     comfortTemplates: [
       '您好，我们已经接到您的求助电话，请不要慌张，保持冷静。',
@@ -314,6 +319,20 @@ export const useAppStore = defineStore('app', {
         if (state.statsFilter.company && a.elevator?.maintenanceCompany !== state.statsFilter.company) return false
         if (state.statsFilter.faultType && a.faultReason !== state.statsFilter.faultType) return false
         if (state.statsFilter.emergency && a.emergencyLevel !== state.statsFilter.emergency) return false
+        
+        const { timeRange, startTime, endTime } = state.statsFilter
+        if (timeRange && timeRange !== 'all') {
+          const time = dayjs(a.alarmTime)
+          const now = dayjs()
+          
+          if (timeRange === '7days') {
+            if (!time.isAfter(now.subtract(7, 'day'))) return false
+          } else if (timeRange === 'month') {
+            if (!time.isAfter(now.startOf('month'))) return false
+          } else if (timeRange === 'custom' && startTime && endTime) {
+            if (!time.isAfter(dayjs(startTime)) || !time.isBefore(dayjs(endTime).endOf('day'))) return false
+          }
+        }
         return true
       })
     },
@@ -438,9 +457,8 @@ export const useAppStore = defineStore('app', {
       if (filtered.length === 0) {
         return dates.map(date => ({ date, time: 0 }))
       }
-      return dates.map(date => {
-        return { date, time: 15 + Math.floor(Math.random() * 20) }
-      })
+      const baseTimes = [18, 22, 15, 25, 20, 16, 24]
+      return dates.map((date, idx) => ({ date, time: baseTimes[idx] }))
     },
 
     getAlarmAuditLogs: (state) => (alarmId) => {
@@ -455,6 +473,46 @@ export const useAppStore = defineStore('app', {
       if (role === 'maintenance') return logs.filter(l => ['dispatch', 'arrive', 'escalate', 'close'].includes(l.actionType))
       if (role === 'rescuer') return logs.filter(l => ['dispatch', 'arrive', 'escalate', 'backup_arrive'].includes(l.actionType))
       return logs
+    },
+
+    selectedAlarm: (state) => {
+      if (!state.selectedAlarmId) return null
+      return state.alarms.find(a => a.id === state.selectedAlarmId) || null
+    },
+
+    reportAlarm: (state) => {
+      if (!state.reportAlarmId) return null
+      return state.alarms.find(a => a.id === state.reportAlarmId) || null
+    },
+
+    getEscalationNextStep: (state) => (alarmId) => {
+      const alarm = state.alarms.find(a => a.id === alarmId)
+      if (!alarm || !alarm.isEscalated) return { step: '', action: '', description: '' }
+      
+      const status = alarm.escalationStatus
+      const nextSteps = {
+        requested: {
+          step: '下一步：确认备援派出',
+          action: 'dispatch_backup',
+          description: '请选择备援人员并派出'
+        },
+        backup_dispatched: {
+          step: '下一步：等待备援到场',
+          action: 'mark_backup_arrived',
+          description: '备援人员到场后点击确认'
+        },
+        backup_arrived: {
+          step: '下一步：结束支援并填写结果',
+          action: 'complete_support',
+          description: '支援完成后填写结果并结案'
+        },
+        completed: {
+          step: '支援已结束',
+          action: '',
+          description: '支援任务已完成'
+        }
+      }
+      return nextSteps[status] || { step: '', action: '', description: '' }
     }
   },
 
@@ -518,18 +576,31 @@ export const useAppStore = defineStore('app', {
       }
     },
 
+    requestSupport(alarmId, reason) {
+      const alarm = this.alarms.find(a => a.id === alarmId)
+      if (alarm) {
+        alarm.isEscalated = true
+        alarm.escalateTime = dayjs().format('YYYY-MM-DD HH:mm:ss')
+        alarm.escalationStatus = 'requested'
+        alarm.supportReason = reason || '救援超时，申请支援'
+        this.addAuditLog(alarmId, 'escalate', `提交支援申请：${alarm.supportReason}`, '监管员', 'supervisor')
+      }
+    },
+
     escalateSupport(alarmId, backupRescuerId) {
       const alarm = this.alarms.find(a => a.id === alarmId)
       const backupRescuer = this.rescuers.find(r => r.id === backupRescuerId)
       if (alarm && backupRescuer) {
-        alarm.isEscalated = true
-        alarm.escalateTime = dayjs().format('YYYY-MM-DD HH:mm:ss')
+        if (!alarm.isEscalated) {
+          alarm.isEscalated = true
+          alarm.escalateTime = dayjs().format('YYYY-MM-DD HH:mm:ss')
+        }
         alarm.escalationStatus = 'backup_dispatched'
         alarm.backupRescuerId = backupRescuerId
         alarm.backupRescuer = backupRescuer
         backupRescuer.status = 'busy'
         backupRescuer.currentTask = alarmId
-        this.addAuditLog(alarmId, 'escalate', `申请支援成功，备援人员${backupRescuer.name}已派出`, '监管员', 'supervisor')
+        this.addAuditLog(alarmId, 'escalate', `确认备援派出：${backupRescuer.name}（${backupRescuer.company}）`, '调度员', 'maintenance')
       }
     },
 
@@ -538,15 +609,20 @@ export const useAppStore = defineStore('app', {
       if (alarm) {
         alarm.escalationStatus = 'backup_arrived'
         alarm.backupArriveTime = dayjs().format('YYYY-MM-DD HH:mm:ss')
-        this.addAuditLog(alarmId, 'backup_arrive', `备援人员${alarm.backupRescuer?.name}已到场`, '备援人员', 'rescuer')
+        this.addAuditLog(alarmId, 'backup_arrive', `备援人员${alarm.backupRescuer?.name}已到场签到`, '备援人员', 'rescuer')
       }
     },
 
-    completeSupport(alarmId) {
+    completeSupport(alarmId, result) {
       const alarm = this.alarms.find(a => a.id === alarmId)
       if (alarm) {
         alarm.escalationStatus = 'completed'
-        this.addAuditLog(alarmId, 'support_complete', '支援任务结束', '调度员', 'maintenance')
+        alarm.supportResult = result || '支援完成，成功解困'
+        if (alarm.backupRescuer) {
+          alarm.backupRescuer.status = 'idle'
+          alarm.backupRescuer.currentTask = ''
+        }
+        this.addAuditLog(alarmId, 'support_complete', `支援结束，结果：${alarm.supportResult}`, '调度员', 'maintenance')
       }
     },
 
@@ -632,8 +708,45 @@ export const useAppStore = defineStore('app', {
         community: '',
         company: '',
         faultType: '',
-        emergency: ''
+        emergency: '',
+        timeRange: 'all',
+        startTime: '',
+        endTime: ''
       }
+    },
+
+    isInTimeRange(alarmTime) {
+      const { timeRange, startTime, endTime } = this.statsFilter
+      if (timeRange === 'all' || !timeRange) return true
+      const time = dayjs(alarmTime)
+      const now = dayjs()
+      
+      if (timeRange === '7days') {
+        return time.isAfter(now.subtract(7, 'day'))
+      }
+      if (timeRange === 'month') {
+        return time.isAfter(now.startOf('month'))
+      }
+      if (timeRange === 'custom' && startTime && endTime) {
+        return time.isAfter(dayjs(startTime)) && time.isBefore(dayjs(endTime).endOf('day'))
+      }
+      return true
+    },
+
+    setSelectedAlarm(alarmId) {
+      this.selectedAlarmId = alarmId
+    },
+
+    clearSelectedAlarm() {
+      this.selectedAlarmId = null
+    },
+
+    setReportAlarm(alarmId) {
+      this.reportAlarmId = alarmId
+    },
+
+    clearReportAlarm() {
+      this.reportAlarmId = null
     },
 
     searchElevators(keyword) {

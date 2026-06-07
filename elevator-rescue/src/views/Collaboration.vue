@@ -109,6 +109,46 @@
                 </div>
               </div>
 
+              <div class="card-section">
+                <div class="card-title">
+                  <el-icon><Document /></el-icon>
+                  作战纪要
+                  <span v-if="currentRole === 'supervisor'" style="margin-left: 8px; color: #909399; font-size: 13px;">
+                    （监管视角：可导出文字纪要）
+                  </span>
+                  <div class="title-actions" style="margin-left: auto">
+                    <el-button 
+                      v-if="currentRole === 'supervisor'" 
+                      size="small" 
+                      type="primary" 
+                      @click="exportSummary"
+                    >
+                      <el-icon><Download /></el-icon>
+                      导出纪要
+                    </el-button>
+                  </div>
+                </div>
+                <div class="summary-content">
+                  <div class="summary-item" v-for="(item, idx) in battleSummary" :key="idx">
+                    <el-tag size="small" :type="item.tagType">{{ item.stage }}</el-tag>
+                    <div class="summary-text">{{ item.content }}</div>
+                    <div class="summary-time">{{ item.time }}</div>
+                  </div>
+                  <div v-if="battleSummary.length === 0" class="empty-tip">暂无作战纪要</div>
+                </div>
+                <div v-if="currentEvent.status !== 'closed'" class="add-note">
+                  <el-input
+                    v-model="newNote"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="补充说明（将进入操作日志）..."
+                  />
+                  <el-button type="primary" style="margin-top: 10px" @click="addNote">
+                    记录补充
+                  </el-button>
+                </div>
+              </div>
+
               <div class="card-section" v-if="showRoleContent('property')">
                 <div class="card-title">
                   <el-icon><ChatDotRound /></el-icon>
@@ -288,10 +328,25 @@
                     :value-style="{ color: currentEvent.isEscalated ? '#f56c6c' : '#67c23a' }"
                   />
                 </div>
+
+                <div v-if="currentEvent.isEscalated && nextStep.step" class="next-step-tip">
+                  <el-icon><Right /></el-icon>
+                  <strong>{{ nextStep.step }}</strong>
+                  <span v-if="nextStep.description" style="margin-left: 8px; color: #909399;">（{{ nextStep.description }}）</span>
+                </div>
+
                 <div style="margin-top: 16px">
-                  <el-button type="warning" v-if="!currentEvent.isEscalated && isEventTimeout()" @click="triggerEscalate">
+                  <el-button type="warning" v-if="!currentEvent.isEscalated && isEventTimeout()" @click="openRequestSupport">
                     <el-icon><Warning /></el-icon>
-                    触发升级支援
+                    提交支援申请
+                  </el-button>
+                  <el-button 
+                    type="primary" 
+                    v-if="currentEvent.isEscalated && currentEvent.escalationStatus === 'requested'" 
+                    @click="openDispatchBackup"
+                  >
+                    <el-icon><Van /></el-icon>
+                    确认备援派出
                   </el-button>
                   <el-button 
                     type="success" 
@@ -304,10 +359,10 @@
                   <el-button 
                     type="primary" 
                     v-if="currentEvent.isEscalated && currentEvent.escalationStatus === 'backup_arrived' && currentEvent.status !== 'closed'" 
-                    @click="completeSupport"
+                    @click="openCompleteSupport"
                   >
                     <el-icon><Check /></el-icon>
-                    结束支援
+                    结束支援并填写结果
                   </el-button>
                   <el-button type="primary" @click="$router.push('/statistics')">
                     <el-icon><TrendCharts /></el-icon>
@@ -320,6 +375,49 @@
         </template>
       </el-col>
     </el-row>
+
+    <el-dialog v-model="requestSupportVisible" title="提交支援申请" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="支援原因">
+          <el-input v-model="supportReason" type="textarea" :rows="3" placeholder="请说明申请支援的原因" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="requestSupportVisible = false">取消</el-button>
+        <el-button type="warning" @click="confirmRequestSupport">提交申请</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="dispatchBackupVisible" title="确认备援派出" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="选择备援人员" required>
+          <el-select v-model="selectedBackupId" placeholder="请选择备援人员" style="width: 100%">
+            <el-option
+              v-for="rescuer in store.backupRescuers.filter(r => r.status === 'idle')"
+              :key="rescuer.id"
+              :label="`${rescuer.name} (${rescuer.company}，预计${rescuer.estimatedArrival}分钟)`"
+              :value="rescuer.id"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dispatchBackupVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmDispatchBackup" :disabled="!selectedBackupId">确认派出</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="completeSupportVisible" title="结束支援并填写结果" width="500px">
+      <el-form label-width="100px">
+        <el-form-item label="支援结果" required>
+          <el-input v-model="supportResult" type="textarea" :rows="3" placeholder="请描述支援结果和处置情况" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="completeSupportVisible = false">取消</el-button>
+        <el-button type="success" @click="confirmCompleteSupport" :disabled="!supportResult.trim()">确认结束</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -360,6 +458,94 @@ const timeline = computed(() => {
     meta: `${log.operator}（${roleLabel(log.operatorRole)}）`
   }))
 })
+
+const battleSummary = computed(() => {
+  if (!currentEvent.value) return []
+  const logs = store.getAlarmAuditLogs(currentEvent.value.id)
+  const stageMap = {
+    alarm: { stage: '接警阶段', tagType: '' },
+    dispatch: { stage: '派遣阶段', tagType: 'warning' },
+    arrive: { stage: '到场阶段', tagType: 'primary' },
+    comfort: { stage: '安抚沟通', tagType: 'success' },
+    escalate: { stage: '支援升级', tagType: 'danger' },
+    backup_arrive: { stage: '备援到场', tagType: 'warning' },
+    support_complete: { stage: '支援结束', tagType: 'info' },
+    close: { stage: '结案阶段', tagType: 'success' },
+    note: { stage: '补充说明', tagType: 'info' }
+  }
+  return logs.map(log => ({
+    time: log.time,
+    stage: stageMap[log.actionType]?.stage || '其他操作',
+    tagType: stageMap[log.actionType]?.tagType || '',
+    content: `${log.operator}（${roleLabel(log.operatorRole)}）：${log.content}`
+  })).reverse()
+})
+
+const nextStep = computed(() => {
+  if (!currentEvent.value) return { step: '', action: '', description: '' }
+  return store.getEscalationNextStep(currentEvent.value.id)
+})
+
+const newNote = ref('')
+const supportReason = ref('')
+const supportResult = ref('')
+const requestSupportVisible = ref(false)
+const dispatchBackupVisible = ref(false)
+const completeSupportVisible = ref(false)
+const selectedBackupId = ref('')
+
+const addNote = () => {
+  if (!newNote.value.trim()) {
+    ElMessage.warning('请输入补充说明内容')
+    return
+  }
+  const operatorRoleMap = {
+    supervisor: '监管人员',
+    property: '物业人员',
+    maintenance: '维保人员',
+    rescuer: '救援人员'
+  }
+  store.addAuditLog(
+    currentEvent.value.id,
+    'note',
+    newNote.value,
+    operatorRoleMap[currentRole.value] || '工作人员',
+    currentRole.value
+  )
+  newNote.value = ''
+  ElMessage.success('补充说明已记录')
+}
+
+const exportSummary = () => {
+  if (!currentEvent.value) return
+  const alarm = currentEvent.value
+  let text = `# 电梯困人事件作战纪要\n\n`
+  text += `## 事件基本信息\n`
+  text += `- 接警编号：${alarm.alarmNo}\n`
+  text += `- 电梯位置：${alarm.elevator?.buildingName}\n`
+  text += `- 被困人数：${alarm.trappedCount} 人\n`
+  text += `- 紧急程度：${emergencyLabel(alarm.emergencyLevel)}\n`
+  text += `- 报警人：${alarm.reporterName}\n\n`
+  text += `## 处置流程记录\n`
+  battleSummary.value.forEach(item => {
+    text += `### [${item.stage}] ${item.time}\n`
+    text += `${item.content}\n\n`
+  })
+  text += `## 处置结果\n`
+  text += `- 当前状态：${statusLabel(alarm.status)}\n`
+  if (alarm.status === 'closed') {
+    text += `- 开门结果：${alarm.doorOpenResult === 'success' ? '成功开门' : '需支援'}\n`
+    text += `- 故障原因：${store.getFaultReasonLabel(alarm.faultReason) || '未知'}\n`
+  }
+  
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  document.body.removeChild(textarea)
+  ElMessage.success('作战纪要已复制到剪贴板')
+}
 
 const logTypeColor = (actionType) => {
   const map = {
@@ -461,17 +647,38 @@ const isEventTimeout = () => {
   return dayjs().diff(dayjs(currentEvent.value.dispatchTime), 'minute') > 30
 }
 
+const openRequestSupport = () => {
+  supportReason.value = '救援超时，需申请支援'
+  requestSupportVisible.value = true
+}
+
+const confirmRequestSupport = () => {
+  if (!supportReason.value.trim()) {
+    ElMessage.warning('请填写支援申请原因')
+    return
+  }
+  store.requestSupport(currentEvent.value.id, supportReason.value)
+  requestSupportVisible.value = false
+  ElMessage.success('支援申请已提交')
+}
+
+const openDispatchBackup = () => {
+  selectedBackupId.value = ''
+  dispatchBackupVisible.value = true
+}
+
+const confirmDispatchBackup = () => {
+  if (!selectedBackupId.value) {
+    ElMessage.warning('请选择备援人员')
+    return
+  }
+  store.escalateSupport(currentEvent.value.id, selectedBackupId.value)
+  dispatchBackupVisible.value = false
+  ElMessage.success('备援已派出')
+}
+
 const triggerEscalate = async () => {
-  try {
-    await ElMessageBox.confirm('确认触发升级支援？将通知备援人员前往支援', '提示', { type: 'warning' })
-    const backupRescuer = store.rescuers.find(r => r.isBackup && r.status === 'idle')
-    if (backupRescuer) {
-      store.escalateSupport(currentEvent.value.id, backupRescuer.id)
-      ElMessage.success('已触发升级支援，备援人员已派出')
-    } else {
-      ElMessage.warning('暂无空闲的备援人员')
-    }
-  } catch {}
+  openRequestSupport()
 }
 
 const markBackupArrived = () => {
@@ -479,9 +686,19 @@ const markBackupArrived = () => {
   ElMessage.success('备援人员已到场')
 }
 
-const completeSupport = () => {
-  store.completeSupport(currentEvent.value.id)
-  ElMessage.success('支援任务已结束')
+const openCompleteSupport = () => {
+  supportResult.value = ''
+  completeSupportVisible.value = true
+}
+
+const confirmCompleteSupport = () => {
+  if (!supportResult.value.trim()) {
+    ElMessage.warning('请填写支援结果')
+    return
+  }
+  store.completeSupport(currentEvent.value.id, supportResult.value)
+  completeSupportVisible.value = false
+  ElMessage.success('支援已结束，结果已记录')
 }
 
 const tick = () => {
@@ -490,6 +707,10 @@ const tick = () => {
 
 onMounted(() => {
   tickTimer.value = setInterval(tick, 1000)
+  if (store.selectedAlarm) {
+    currentEvent.value = store.selectedAlarm
+    store.clearSelectedAlarm()
+  }
 })
 
 onUnmounted(() => {
@@ -703,5 +924,58 @@ onUnmounted(() => {
   justify-content: space-around;
   align-items: center;
   padding: 10px 0;
+}
+
+.title-actions {
+  display: flex;
+  align-items: center;
+}
+
+.summary-content {
+  max-height: 350px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.summary-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.summary-item:last-child {
+  border-bottom: none;
+}
+
+.summary-text {
+  flex: 1;
+  font-size: 13px;
+  color: #303133;
+  line-height: 1.5;
+}
+
+.summary-time {
+  font-size: 11px;
+  color: #909399;
+  white-space: nowrap;
+}
+
+.add-note {
+  padding-top: 12px;
+  border-top: 1px solid #ebeef5;
+}
+
+.next-step-tip {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #fff7e6;
+  border: 1px solid #ffd591;
+  border-radius: 6px;
+  color: #d46b08;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
 }
 </style>

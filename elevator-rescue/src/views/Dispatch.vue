@@ -147,12 +147,21 @@
                     <div class="detail">
                       {{ recommendedRescuer.company }}
                       <el-tag v-if="recommendedRescuer.isBackup" size="small" type="info">备援</el-tag>
+                      <el-tag v-if="isSameCompany(recommendedRescuer)" size="small" type="success" style="margin-left: 4px">同单位</el-tag>
+                    </div>
+                    <div class="detail-extra">
+                      负责区域：{{ recommendedRescuer.area }}
+                      <span style="margin-left: 12px">当前任务：{{ getRescuerTaskCount(recommendedRescuer) }} 件</span>
                     </div>
                   </div>
                   <div class="eta">
                     <span class="eta-value">{{ recommendedRescuer.estimatedArrival }}</span>
                     <span class="eta-unit">分钟</span>
                   </div>
+                </div>
+                <div class="recommend-reason">
+                  <el-icon><MagicStick /></el-icon>
+                  推荐理由：{{ getRecommendReason(recommendedRescuer) }}
                 </div>
               </div>
             </div>
@@ -164,12 +173,20 @@
                 :key="rescuer.id"
                 class="comparison-item"
                 :class="{ recommended: rescuer.id === recommendedRescuer?.id && !recommendedRescuer?.isBackup }"
+                @click="selectedRescuerId = rescuer.id"
               >
                 <div class="rescuer-basic">
                   <el-avatar :size="32" :icon="User" />
                   <div class="rescuer-text">
-                    <div class="r-name">{{ rescuer.name }}</div>
+                    <div class="r-name">
+                      {{ rescuer.name }}
+                      <el-tag v-if="rescuer.id === recommendedRescuer?.id && !recommendedRescuer?.isBackup" size="small" type="success" style="margin-left: 4px">推荐</el-tag>
+                    </div>
                     <div class="r-company">{{ rescuer.company }}</div>
+                    <div class="r-extra">
+                      区域：{{ rescuer.area }}
+                      <span style="margin-left: 8px">任务：{{ getRescuerTaskCount(rescuer) }}件</span>
+                    </div>
                   </div>
                 </div>
                 <div class="rescuer-metrics">
@@ -196,6 +213,7 @@
                 :key="rescuer.id"
                 class="comparison-item backup"
                 :class="{ recommended: rescuer.id === recommendedRescuer?.id && recommendedRescuer?.isBackup }"
+                @click="selectedRescuerId = rescuer.id"
               >
                 <div class="rescuer-basic">
                   <el-avatar :size="32" :icon="User" />
@@ -203,8 +221,13 @@
                     <div class="r-name">
                       {{ rescuer.name }}
                       <el-tag size="small" type="danger">备援</el-tag>
+                      <el-tag v-if="rescuer.id === recommendedRescuer?.id && recommendedRescuer?.isBackup" size="small" type="success" style="margin-left: 4px">推荐</el-tag>
                     </div>
                     <div class="r-company">{{ rescuer.company }}</div>
+                    <div class="r-extra">
+                      区域：{{ rescuer.area }}
+                      <span style="margin-left: 8px">任务：{{ getRescuerTaskCount(rescuer) }}件</span>
+                    </div>
                   </div>
                 </div>
                 <div class="rescuer-metrics">
@@ -221,6 +244,23 @@
               </div>
               <div v-if="backupRescuers.length === 0" class="empty-tip">
                 暂无空闲备援人员
+              </div>
+            </div>
+
+            <div class="dispatch-action" v-if="selectedPendingAlarm">
+              <el-button 
+                type="primary" 
+                size="large" 
+                style="width: 100%" 
+                :disabled="!selectedRescuerId"
+                @click="confirmDispatchFromPanel"
+              >
+                <el-icon><Check /></el-icon>
+                确认派遣{{ selectedRescuerId ? ' (' + getRescuerName(selectedRescuerId) + ')' : '' }}
+              </el-button>
+              <div v-if="selectedRescuerId" class="dispatch-note">
+                <el-icon><InfoFilled /></el-icon>
+                派遣依据：{{ getDispatchReason(selectedRescuerId) }}
               </div>
             </div>
           </template>
@@ -498,8 +538,70 @@ const formatTimer = (alarm) => {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
+const isSameCompany = (rescuer) => {
+  if (!selectedPendingAlarm.value) return false
+  return rescuer.company === selectedPendingAlarm.value.elevator?.maintenanceCompany
+}
+
+const getRescuerTaskCount = (rescuer) => {
+  return store.alarms.filter(a => 
+    (a.rescuerId === rescuer.id || a.backupRescuerId === rescuer.id) && 
+    a.status !== 'closed'
+  ).length
+}
+
+const getRecommendReason = (rescuer) => {
+  const reasons = []
+  if (isSameCompany(rescuer) && !rescuer.isBackup) {
+    reasons.push('属于本维保单位，熟悉电梯情况')
+  }
+  if (rescuer.area === selectedPendingAlarm.value?.elevator?.area) {
+    reasons.push('负责同一区域，距离较近')
+  }
+  if (getRescuerTaskCount(rescuer) === 0) {
+    reasons.push('当前无任务，可立即出发')
+  }
+  reasons.push(`预计${rescuer.estimatedArrival}分钟到达`)
+  return reasons.join('；')
+}
+
+const getRescuerName = (rescuerId) => {
+  const rescuer = store.rescuers.find(r => r.id === rescuerId)
+  return rescuer ? rescuer.name : ''
+}
+
+const getDispatchReason = (rescuerId) => {
+  const rescuer = store.rescuers.find(r => r.id === rescuerId)
+  if (!rescuer) return ''
+  const reasons = []
+  reasons.push(`${rescuer.name}（${rescuer.company}）`)
+  reasons.push(`预计${rescuer.estimatedArrival}分钟到达`)
+  if (isSameCompany(rescuer)) reasons.push('本单位人员')
+  if (rescuer.isBackup) reasons.push('备援支援')
+  reasons.push(`负责区域：${rescuer.area}`)
+  return reasons.join('，')
+}
+
+const confirmDispatchFromPanel = () => {
+  if (!selectedPendingAlarm.value || !selectedRescuerId.value) return
+  const rescuer = store.rescuers.find(r => r.id === selectedRescuerId.value)
+  const reason = getDispatchReason(selectedRescuerId.value)
+  store.dispatchAlarm(selectedPendingAlarm.value.id, selectedRescuerId.value)
+  store.addAuditLog(
+    selectedPendingAlarm.value.id,
+    'dispatch',
+    `调度决策派遣：${rescuer?.name}，派遣依据：${reason}`,
+    '调度员',
+    'maintenance'
+  )
+  ElMessage.success('派遣成功')
+  selectedPendingAlarm.value = null
+  selectedRescuerId.value = ''
+}
+
 const handleSelectAlarm = (alarm) => {
   selectedPendingAlarm.value = alarm
+  selectedRescuerId.value = recommendedRescuer.value?.id || ''
 }
 
 const openDispatchDialog = (alarm) => {
@@ -565,8 +667,19 @@ const tickFn = () => {
   tick.value++
 }
 
+const handleSelectAlarm = (row) => {
+  selectedPendingAlarm.value = row
+}
+
 onMounted(() => {
   timer.value = setInterval(tickFn, 1000)
+  if (store.selectedAlarm) {
+    const alarm = store.selectedAlarm
+    if (alarm.status === 'pending') {
+      selectedPendingAlarm.value = alarm
+    }
+    store.clearSelectedAlarm()
+  }
 })
 
 onUnmounted(() => {
@@ -660,6 +773,56 @@ onUnmounted(() => {
 .recommend-rescuer .eta-unit {
   font-size: 12px;
   margin-left: 2px;
+}
+
+.recommend-rescuer .detail-extra {
+  font-size: 11px;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+
+.recommend-reason {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: rgba(103, 194, 58, 0.2);
+  border-radius: 4px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comparison-item {
+  cursor: pointer;
+}
+
+.comparison-item:hover {
+  background: #ecf5ff;
+  border-color: #409eff;
+}
+
+.rescuer-text .r-extra {
+  font-size: 11px;
+  color: #909399;
+  margin-top: 2px;
+}
+
+.dispatch-action {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #ebeef5;
+}
+
+.dispatch-note {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #ecf5ff;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #409eff;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .comparison-list {

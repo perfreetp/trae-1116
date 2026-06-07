@@ -34,6 +34,25 @@
           </el-select>
         </div>
         <div class="filter-item">
+          <span class="filter-label">时间范围：</span>
+          <el-select v-model="filter.timeRange" placeholder="全部" style="width: 120px" @change="handleTimeRangeChange">
+            <el-option label="全部" value="all" />
+            <el-option label="最近7天" value="7days" />
+            <el-option label="本月" value="month" />
+            <el-option label="自定义" value="custom" />
+          </el-select>
+        </div>
+        <div class="filter-item" v-if="filter.timeRange === 'custom'">
+          <el-date-picker
+            v-model="dateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            style="width: 280px"
+          />
+        </div>
+        <div class="filter-item">
           <el-button type="primary" @click="applyFilter">
             <el-icon><Search /></el-icon>
             查询
@@ -278,7 +297,20 @@
           </div>
 
           <div class="report-section">
-            <h4>五、操作留痕</h4>
+            <h4>五、操作留痕（按角色分组）</h4>
+            <div v-for="(groupLogs, role) in groupedAuditLogs" :key="role" class="role-log-group">
+              <div class="role-log-title">
+                <el-icon><User /></el-icon>
+                {{ roleLabel(role) }}
+              </div>
+              <div class="role-log-list">
+                <div v-for="(log, idx) in groupLogs" :key="idx" class="role-log-item">
+                  <span class="role-log-time">{{ log.time }}</span>
+                  <span class="role-log-text">{{ log.content }}</span>
+                </div>
+              </div>
+            </div>
+            <el-divider>时间线视图</el-divider>
             <el-timeline>
               <el-timeline-item
                 v-for="(log, idx) in reportAuditLogs"
@@ -317,8 +349,11 @@ const filter = reactive({
   community: '',
   company: '',
   faultType: '',
-  emergency: ''
+  emergency: '',
+  timeRange: 'all'
 })
+
+const dateRange = ref([])
 
 const faultChartRef = ref(null)
 const trendChartRef = ref(null)
@@ -337,13 +372,27 @@ const companies = computed(() => {
   return Array.from(set)
 })
 
+const handleTimeRangeChange = () => {
+  if (filter.timeRange !== 'custom') {
+    dateRange.value = []
+  }
+}
+
 const applyFilter = () => {
-  store.setStatsFilter({
+  const params = {
     community: filter.community,
     company: filter.company,
     faultType: filter.faultType,
-    emergency: filter.emergency
-  })
+    emergency: filter.emergency,
+    timeRange: filter.timeRange,
+    startTime: '',
+    endTime: ''
+  }
+  if (filter.timeRange === 'custom' && dateRange.value && dateRange.value.length === 2) {
+    params.startTime = dayjs(dateRange.value[0]).format('YYYY-MM-DD')
+    params.endTime = dayjs(dateRange.value[1]).format('YYYY-MM-DD')
+  }
+  store.setStatsFilter(params)
   nextTick(() => {
     initFaultChart()
     initTrendChart()
@@ -355,6 +404,8 @@ const resetFilter = () => {
   filter.company = ''
   filter.faultType = ''
   filter.emergency = ''
+  filter.timeRange = 'all'
+  dateRange.value = []
   store.resetStatsFilter()
   nextTick(() => {
     initFaultChart()
@@ -364,6 +415,17 @@ const resetFilter = () => {
 
 const filteredStats = computed(() => {
   const alarms = store.filteredAlarms
+  if (alarms.length === 0) {
+    return {
+      total: 0,
+      avgResponseTime: 0,
+      timeoutCount: 0,
+      escalatedCount: 0,
+      onTimeRate: 0,
+      avgScore: '0.0',
+      evaluationCount: 0
+    }
+  }
   const closed = alarms.filter(a => a.status === 'closed')
   const total = alarms.length
   const timeoutCount = closed.filter(isTimeout).length
@@ -380,13 +442,13 @@ const filteredStats = computed(() => {
   const onTimeCount = responseTimes.filter(t => t <= 30).length
   const onTimeRate = closed.length > 0
     ? Math.round((onTimeCount / closed.length) * 100)
-    : 100
+    : 0
   
   const evaluated = closed.filter(a => a.evaluation)
   const scores = evaluated.map(a => a.evaluation.score)
   const avgScore = scores.length > 0
     ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1)
-    : '4.5'
+    : '0.0'
   
   return {
     total,
@@ -460,6 +522,19 @@ const viewReport = (row) => {
 const reportAuditLogs = computed(() => {
   if (!currentReport.value) return []
   return store.getAlarmAuditLogs(currentReport.value.id)
+})
+
+const groupedAuditLogs = computed(() => {
+  if (!currentReport.value) return {}
+  const logs = store.getAlarmAuditLogs(currentReport.value.id)
+  const groups = {}
+  logs.forEach(log => {
+    if (!groups[log.operatorRole]) {
+      groups[log.operatorRole] = []
+    }
+    groups[log.operatorRole].push(log)
+  })
+  return groups
 })
 
 const logTypeColor = (actionType) => {
@@ -557,6 +632,11 @@ onMounted(() => {
     initFaultChart()
     initTrendChart()
   })
+  if (store.reportAlarm) {
+    currentReport.value = store.reportAlarm
+    reportVisible.value = true
+    store.clearReportAlarm()
+  }
 })
 
 watch(() => store.statsFilter, () => {
@@ -697,5 +777,50 @@ watch(() => store.statsFilter, () => {
 .report-section p {
   color: #606266;
   margin: 6px 0;
+}
+
+.role-log-group {
+  margin-bottom: 16px;
+}
+
+.role-log-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: #409eff;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #ecf5ff;
+  border-radius: 4px;
+}
+
+.role-log-list {
+  padding-left: 8px;
+}
+
+.role-log-item {
+  display: flex;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px dashed #f0f0f0;
+  font-size: 13px;
+}
+
+.role-log-item:last-child {
+  border-bottom: none;
+}
+
+.role-log-time {
+  color: #909399;
+  font-size: 12px;
+  white-space: nowrap;
+  min-width: 150px;
+}
+
+.role-log-text {
+  flex: 1;
+  color: #303133;
 }
 </style>
